@@ -12,7 +12,10 @@
   .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
   label { font-size: 0.85rem; color: #aaa; }
   select, input[type=range] { background: #16213e; color: #e0e0e0; border: 1px solid #334; border-radius: 4px; padding: 0.3rem; }
-  select { min-width: 200px; }
+  select { min-width: 240px; }
+  .lang-filters { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.3rem; }
+  .lang-filters button { padding: 0.2rem 0.6rem; font-size: 0.75rem; border-radius: 4px; border: 1px solid #334; background: #16213e; color: #aaa; cursor: pointer; }
+  .lang-filters button.active { background: #4cc9f0; color: #1a1a2e; border-color: #4cc9f0; }
   input[type=range] { width: 140px; }
   button { padding: 0.5rem 1.5rem; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600; }
   #playBtn { background: #4cc9f0; color: #1a1a2e; }
@@ -29,7 +32,8 @@
     <button id="playBtn" onclick="toggle()">Play</button>
     <button id="stopBtn" onclick="stop()">Stop</button>
     <div>
-      <label>Voice</label><br>
+      <label>Voice</label>
+      <div class="lang-filters" id="langFilters"></div>
       <select id="voice"></select>
     </div>
     <div>
@@ -48,26 +52,62 @@ const voiceEl = document.getElementById('voice');
 const rateEl = document.getElementById('rate');
 const rateVal = document.getElementById('rateVal');
 const playBtn = document.getElementById('playBtn');
+const langFiltersEl = document.getElementById('langFilters');
 let speaking = false, paused = false;
+const defaultLangs = ['en', 'pl', 'de'];
+let enabledLangs = new Set(defaultLangs);
+let activeLang = null; // null = show all enabled
 
 rateEl.addEventListener('input', () => rateVal.textContent = parseFloat(rateEl.value).toFixed(1) + 'x');
 
-function loadVoices() {
-  const voices = synth.getVoices();
-  voiceEl.innerHTML = '';
-  // prefer natural/neural voices, put them first
-  const sorted = [...voices].sort((a, b) => {
-    const aGood = /natural|neural|online/i.test(a.name) ? 0 : 1;
-    const bGood = /natural|neural|online/i.test(b.name) ? 0 : 1;
-    return aGood - bGood || a.name.localeCompare(b.name);
-  });
-  sorted.forEach((v, i) => {
-    const opt = document.createElement('option');
-    opt.value = voices.indexOf(v);
-    opt.textContent = `${v.name} (${v.lang})`;
-    voiceEl.appendChild(opt);
+function formatVoiceLabel(voice) {
+  const name = voice.name.replace(/^Microsoft\s+/i, '');
+  const langTag = voice.lang.split('-')[0].toUpperCase();
+  return `${langTag} — ${name}`;
+}
+
+function renderLangFilters(voices) {
+  const langs = [...new Set(voices.map(v => v.lang.split('-')[0]))].sort();
+  langFiltersEl.innerHTML = '';
+  // "All" button
+  const allBtn = document.createElement('button');
+  allBtn.textContent = 'All';
+  if (!activeLang) allBtn.classList.add('active');
+  allBtn.onclick = () => { activeLang = null; populateDropdown(); };
+  langFiltersEl.appendChild(allBtn);
+  langs.forEach(lang => {
+    if (!enabledLangs.has(lang)) return;
+    const btn = document.createElement('button');
+    btn.textContent = lang.toUpperCase();
+    if (activeLang === lang) btn.classList.add('active');
+    btn.onclick = () => { activeLang = lang; populateDropdown(); };
+    langFiltersEl.appendChild(btn);
   });
 }
+
+function populateDropdown() {
+  const voices = synth.getVoices();
+  const filtered = voices.filter(v => {
+    const lang = v.lang.split('-')[0];
+    if (activeLang) return lang === activeLang;
+    return enabledLangs.has(lang);
+  });
+  const sorted = [...filtered].sort((a, b) => {
+    const aGood = /natural|neural|online/i.test(a.name) ? 0 : 1;
+    const bGood = /natural|neural|online/i.test(b.name) ? 0 : 1;
+    return aGood - bGood || a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name);
+  });
+  voiceEl.innerHTML = '';
+  sorted.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = voices.indexOf(v);
+    opt.textContent = formatVoiceLabel(v);
+    voiceEl.appendChild(opt);
+  });
+  renderLangFilters(voices);
+}
+
+function loadVoices() { populateDropdown(); }
 loadVoices();
 synth.onvoiceschanged = loadVoices;
 
