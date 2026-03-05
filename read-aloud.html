@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Read Aloud</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, sans-serif; background: #1a1a2e; color: #e0e0e0; padding: 2rem; min-height: 100vh; }
+  h1 { font-size: 1.4rem; margin-bottom: 1rem; color: #a0c4ff; }
+  textarea { width: 100%; height: 45vh; background: #16213e; color: #e0e0e0; border: 1px solid #334; border-radius: 8px; padding: 1rem; font-size: 1rem; resize: vertical; }
+  .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin: 1rem 0; }
+  label { font-size: 0.85rem; color: #aaa; }
+  select, input[type=range] { background: #16213e; color: #e0e0e0; border: 1px solid #334; border-radius: 4px; padding: 0.3rem; }
+  select { min-width: 200px; }
+  input[type=range] { width: 140px; }
+  button { padding: 0.5rem 1.5rem; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; font-weight: 600; }
+  #playBtn { background: #4cc9f0; color: #1a1a2e; }
+  #playBtn:hover { background: #7dd8f5; }
+  #stopBtn { background: #f07167; color: #fff; }
+  #stopBtn:hover { background: #f4978e; }
+  .speed-val { font-size: 0.85rem; min-width: 2.5rem; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>Read Aloud</h1>
+  <textarea id="text" placeholder="Paste your text here..."></textarea>
+  <div class="controls">
+    <button id="playBtn" onclick="toggle()">Play</button>
+    <button id="stopBtn" onclick="stop()">Stop</button>
+    <div>
+      <label>Voice</label><br>
+      <select id="voice"></select>
+    </div>
+    <div>
+      <label>Speed</label><br>
+      <div style="display:flex;align-items:center;gap:0.3rem">
+        <input type="range" id="rate" min="0.5" max="3" step="0.1" value="1">
+        <span class="speed-val" id="rateVal">1.0x</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+const synth = window.speechSynthesis;
+const textEl = document.getElementById('text');
+const voiceEl = document.getElementById('voice');
+const rateEl = document.getElementById('rate');
+const rateVal = document.getElementById('rateVal');
+const playBtn = document.getElementById('playBtn');
+let speaking = false, paused = false;
+
+rateEl.addEventListener('input', () => rateVal.textContent = parseFloat(rateEl.value).toFixed(1) + 'x');
+
+function loadVoices() {
+  const voices = synth.getVoices();
+  voiceEl.innerHTML = '';
+  // prefer natural/neural voices, put them first
+  const sorted = [...voices].sort((a, b) => {
+    const aGood = /natural|neural|online/i.test(a.name) ? 0 : 1;
+    const bGood = /natural|neural|online/i.test(b.name) ? 0 : 1;
+    return aGood - bGood || a.name.localeCompare(b.name);
+  });
+  sorted.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = voices.indexOf(v);
+    opt.textContent = `${v.name} (${v.lang})`;
+    voiceEl.appendChild(opt);
+  });
+}
+loadVoices();
+synth.onvoiceschanged = loadVoices;
+
+function toggle() {
+  if (paused) { synth.resume(); paused = false; playBtn.textContent = 'Pause'; return; }
+  if (speaking) { synth.pause(); paused = true; playBtn.textContent = 'Resume'; return; }
+  const text = textEl.value.trim();
+  if (!text) return;
+  // Split into chunks for long text (synth cuts off around 200-300 chars in some browsers)
+  const chunks = text.match(/[\s\S]{1,1000}(?:\s|$)/g) || [text];
+  speakChunks(chunks, 0);
+}
+
+function speakChunks(chunks, i) {
+  if (i >= chunks.length) { resetState(); return; }
+  const utter = new SpeechSynthesisUtterance(chunks[i]);
+  const voices = synth.getVoices();
+  if (voiceEl.value) utter.voice = voices[parseInt(voiceEl.value)];
+  utter.rate = parseFloat(rateEl.value);
+  utter.onend = () => speakChunks(chunks, i + 1);
+  utter.onerror = () => resetState();
+  synth.speak(utter);
+  speaking = true;
+  playBtn.textContent = 'Pause';
+}
+
+function stop() { synth.cancel(); resetState(); }
+function resetState() { speaking = false; paused = false; playBtn.textContent = 'Play'; }
+</script>
+</body>
+</html>
